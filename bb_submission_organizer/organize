@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# Data path (raw zip contents) is hard-coded per instructions
+data="./data/"
+# Destination path (organized zip contents) is hard-coded per instructions
+destination="./grading/"
+target=""
+
+
+# Prompt user for zip file path
+echo "Enter the target zip file path: "
+read target
+
+if [[ ! -e $target ]]; then
+    echo "Invalid Input: the file \"$target\" does not exist."
+    exit
+fi
+
+# Create the data directory if it does not exist
+if [[ ! -d $data ]]; then
+    mkdir $data
+fi
+
+# Unzip target files contents to data path
+unzip $target -d $data
+
+# Create destination directory if it does not exist
+if [[ ! -d $destination ]]; then
+    mkdir $destination
+fi
+
+# Read each student's name from the data files
