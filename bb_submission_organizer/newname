@@ -1,0 +1,128 @@
+#!/bin/bash
+
+: 'Renames a target file based on arguments.
+If the destination file name already exists, an 
+index number is appended to the destination name.
+'
+
+# Quiet mode: no shell output.
+O_QUIET_CHAR="-q"
+# Enum corresponding to the idnex of the quiet option in the options array
+O_QUIET=0
+# Debug mode: enable debugging output and warnings (may not exist in every version)
+O_DEBUG_CHAR="-D"
+# Enum corresponding to the index of the debug option in options array
+O_DEBUG=1
+
+# Array corresponding to options with values representing if the mode is enabled
+options[O_QUIET]=0
+options[O_DEBUG]=0
+
+if [[ ${options[O_DEBUG]} -eq 1 ]]; then
+    echo "Running newname script in Debug Mode."
+    if [[ ${options[O_QUIET]} -eq 1 ]]; then
+        echo "Quiet Mode enabled"
+    fi
+fi
+
+# Path to the target file
+target=""
+# Path to the move destination 
+destination=""
+# Array of option arguments passed
+
+# Print proper usage message to console. 
+function show_usage() {
+    echo "TARGET_PATH and DESTINATION_PATH are required."
+    echo "usage: newname [-q quiet] [-d debug] [TARGET_PATH] [DESTINATION_PATH]"
+}
+
+# Get options from command-line arguments if they are present.
+# Option arguments must be 1 character starting with a '-' (hyphen)
+if [[ $# -eq 2 ]]; then
+    # Get target path from argument 1
+    target=$1
+    # Get destination path from argument 2
+    destination=$2
+
+elif [[ $# -gt 2 ]]; then
+    # Arguments starting with '-' (hyphen) are added to options array
+    
+    # 2 arguments that DON'T start with '-' are expected to be TARGET and DESTINATION
+
+    # If there are more than 2 arguments that don't start with '-', throw error
+    echo "Error (1):"
+    if [[ ${options[O_QUIET]} -eq 0 ]]; then
+        echo "Unexpected argument after \"$destination\": $i"
+        show_usage
+    fi
+    exit
+
+else
+    # Insufficient number of arguments (less than 2)
+    echo "Error (2):"
+    if [[ ${options[O_QUIET]} -eq 0 ]]; then
+        echo "Invalid number of arguments: "
+        show_usage
+    fi
+    exit
+fi
+
+# Exception (2): Target file does not exist.
+if [[ ! -e "$target" ]]; then
+    echo "Error (3):"
+    if [[ ${options[O_QUIET]} -eq 0 ]]; then
+        echo "File \"$target\" does not exist in the current directory."
+        exit
+    fi
+fi
+
+# Check if destination path already exists
+if [[ ! -e "$destination" ]]; then
+    # Destination path does NOT exist, rename target file as normal.
+    mv $target $destination
+
+    if [ ! $? -eq 0 ]; then
+        echo "Error (4)"
+        if [[ ${options[O_QUIET]} -eq 0 ]]; then
+            echo "Error (4): mv command exited code $?."
+            exit
+        fi
+    fi
+
+    if [[ ${options[O_DEBUG]} -eq 1 ]]; then
+        echo "File \"$target\" was successfully renamed to \"$destination\""
+    fi
+else
+    : 'File name already exists. Increment and append the 
+    index number to the destination path and check if that 
+    name already exists. Iterates index until no matching file 
+    is found, then renames the target file.
+    '
+    index=0
+    new_path=$destination
+
+    while [ -e $new_path ]
+    do
+        let index++
+        new_path="$destination.$index"
+    done
+
+    if [[ ${options[O_QUIET]} -eq 0 ]]; then
+        echo "File \"$destination\" already exists:"
+    fi
+
+    mv $target $new_path
+
+    if [ ! $? -eq 0 ]; then
+        echo "Error (5):"
+        if [[ ${options[O_QUIET]} -eq 0 ]]; then
+            echo "mv command exited code $?."
+            exit
+        fi
+    fi
+
+    if [[ ${options[O_QUIET]} -eq 0 ]]; then
+        echo "\"$target\" was renamed to \"$new_path\"."
+    fi
+fi
