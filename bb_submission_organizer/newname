@@ -5,37 +5,101 @@ If the destination file name already exists, an
 index number is appended to the destination name.
 '
 
-# Quiet mode: no shell output.
-O_QUIET_CHAR="-q"
-# Enum corresponding to the idnex of the quiet option in the options array
+# Print proper usage message to console. 
+function show_usage() {
+
+    echo "TARGET_PATH and DESTINATION_PATH are required."
+    echo "Usage: newname [-q quiet] [-d debug] TARGET_PATH DESTINATION_PATH"
+
+    # Show accepted optional arguments
+    if [[ $1 == "options" ]]; then
+        echo "  Available options:"
+        echo "    -q    Quiet mode: limited shell output and error messages."
+        echo "    -D    Debug mode: Extended shell output (logs, warnings, errors)."
+    fi
+    # End script after displaying help message
+    exit
+}
+
+# Echo error code and message to shell.
+# param 1: Error Code
+# param 2: (optional) String to echo
+function throw_error() {
+
+    echo "Error ($1)"
+
+    # If quiet mode is enabled, exit without detailed error message
+    if [[ options_enabled[$O_QUIET] -eq 1 ]]; then
+        exit
+    fi
+
+    case $1 in
+    1)  echo "Insufficient number of arguments."
+        show_usage
+        ;;
+    2)  echo "Unexpected argument: $2"
+        show_usage
+        ;;
+    3)  echo "Invalid argument: $2"
+        show_usage "options"
+        ;;
+    4)  echo "Target file \"$2\" does not exist."
+        ;;
+    5)  echo "mv command exited unexpectedly with code $2"
+        ;;
+    *)  echo "An unkown error occured: $1"
+        ;;
+    esac
+
+    exit
+}
+
+# Array of optional modes that can be enabled via command-line arguments
+OPTION_STRINGS=()
+
+# Quiet mode: limited shell output.
+# Enum corresponding to the index of the quiet option in the options array
 O_QUIET=0
-# Debug mode: enable debugging output and warnings (may not exist in every version)
-O_DEBUG_CHAR="-D"
+# Debug mode: more shell output and debug messages
 # Enum corresponding to the index of the debug option in options array
 O_DEBUG=1
 
-# Array corresponding to options with values representing if the mode is enabled
-options[O_QUIET]=0
-options[O_DEBUG]=0
+OPTIONS[O_QUIET]="-q"
+OPTIONS[O_DEBUG]="-D"
 
-if [[ ${options[O_DEBUG]} -eq 1 ]]; then
-    echo "Running newname script in Debug Mode."
-    if [[ ${options[O_QUIET]} -eq 1 ]]; then
-        echo "Quiet Mode enabled"
+# Array with values indicating if an option at the corresponding index is enabled
+options_enabled=()
+
+# All options disabled by default (ininitialized in a loop for scalability of options)
+for (( i=0; i<${#OPTIONS[@]}; i++ )); do
+    options_enabled[i]=0
+done
+
+function handle_options() {
+
+    # Check argument against accepted options
+    for (( i=0; i<${#OPTIONS[@]}; i++ )); do
+        # If argument matches an options string, set the option to enabled
+        if [[ $1 == ${OPTIONS[i]} ]]; then
+            options_enabled[i]=1
+            if [[ $i -eq O_DEBUG ]]; then
+                echo "Debug mode enabled..."
+            fi
+            return
+        fi
+    done
+    
+    # Argument does not match any valid options
+    if [[ ${options_enabled[O_QUIET]} -eq 0 ]]; then
+        throw_error 3 $1
     fi
-fi
+}
 
 # Path to the target file
 target=""
 # Path to the move destination 
 destination=""
 # Array of option arguments passed
-
-# Print proper usage message to console. 
-function show_usage() {
-    echo "TARGET_PATH and DESTINATION_PATH are required."
-    echo "usage: newname [-q quiet] [-d debug] [TARGET_PATH] [DESTINATION_PATH]"
-}
 
 # Get options from command-line arguments if they are present.
 # Option arguments must be 1 character starting with a '-' (hyphen)
@@ -46,35 +110,39 @@ if [[ $# -eq 2 ]]; then
     destination=$2
 
 elif [[ $# -gt 2 ]]; then
-    # Arguments starting with '-' (hyphen) are added to options array
-    
-    # 2 arguments that DON'T start with '-' are expected to be TARGET and DESTINATION
-
-    # If there are more than 2 arguments that don't start with '-', throw error
-    echo "Error (1):"
-    if [[ ${options[O_QUIET]} -eq 0 ]]; then
-        echo "Unexpected argument after \"$destination\": $i"
-        show_usage
-    fi
-    exit
-
+    # Arguments starting with '-' are handled as options
+    i=0
+    for arg in $@; do
+        if [[ $arg =~ \- ]]; then
+            handle_options $arg
+            continue
+        else [[ ! $arg =~ \- ]]
+            if [[ -z $target ]]; then
+                # First argument not starting with '-' is expected to be TARGET
+                target=$arg
+                if [[ options_enabled[O_DEBUG] -eq 1 ]]; then
+                    echo "TARGET path set to: $target"
+                fi
+            elif [[ -z $destination ]]; then
+                # TARGET already assigned, arg is expected to be DESTINATION
+                destination=$arg
+                if [[ options_enabled[O_DEBUG] -eq 1 ]]; then
+                    echo "DESTINATION path set to: $destination"
+                fi
+            else
+                # Extra, unexpected argument after destination (not an option)
+                throw_error 2 $arg
+            fi
+        fi
+    done
 else
     # Insufficient number of arguments (less than 2)
-    echo "Error (2):"
-    if [[ ${options[O_QUIET]} -eq 0 ]]; then
-        echo "Invalid number of arguments: "
-        show_usage
-    fi
-    exit
+    throw_error 1
 fi
 
-# Exception (2): Target file does not exist.
+# Error (4): Target file does not exist.
 if [[ ! -e "$target" ]]; then
-    echo "Error (3):"
-    if [[ ${options[O_QUIET]} -eq 0 ]]; then
-        echo "File \"$target\" does not exist in the current directory."
-        exit
-    fi
+    throw_error 4 "$target"  
 fi
 
 # Check if destination path already exists
@@ -83,14 +151,11 @@ if [[ ! -e "$destination" ]]; then
     mv $target $destination
 
     if [ ! $? -eq 0 ]; then
-        echo "Error (4)"
-        if [[ ${options[O_QUIET]} -eq 0 ]]; then
-            echo "Error (4): mv command exited code $?."
-            exit
-        fi
+        # mv command failed and returned an error code
+        throw_error 5 $?
     fi
 
-    if [[ ${options[O_DEBUG]} -eq 1 ]]; then
+    if [[ ${options_enabled[O_DEBUG]} -eq 1 ]]; then
         echo "File \"$target\" was successfully renamed to \"$destination\""
     fi
 else
@@ -102,27 +167,23 @@ else
     index=0
     new_path=$destination
 
-    while [ -e $new_path ]
-    do
+    while [ -e $new_path ]; do
         let index++
         new_path="$destination.$index"
     done
 
-    if [[ ${options[O_QUIET]} -eq 0 ]]; then
+    if [[ ${options_enabled[O_QUIET]} -eq 0 ]]; then
         echo "File \"$destination\" already exists:"
     fi
 
     mv $target $new_path
 
     if [ ! $? -eq 0 ]; then
-        echo "Error (5):"
-        if [[ ${options[O_QUIET]} -eq 0 ]]; then
-            echo "mv command exited code $?."
-            exit
-        fi
+        # mv command failed and returned an error code
+        throw_error 5
     fi
 
-    if [[ ${options[O_QUIET]} -eq 0 ]]; then
+    if [[ ${options_enabled[O_QUIET]} -eq 0 ]]; then
         echo "\"$target\" was renamed to \"$new_path\"."
     fi
 fi
