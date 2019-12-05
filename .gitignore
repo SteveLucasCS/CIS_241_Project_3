@@ -4,3 +4,5 @@
 *.txt.*
 ./bb_submission_organizer/data
 ./bb_submission_organizer/grading
+data
+grading
