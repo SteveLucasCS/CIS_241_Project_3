@@ -1,0 +1,124 @@
+#!/bin/bash
+
+# Path to newname script (optional)
+newname="./newname"
+
+: 'Uses newname script to preserve duplicate files. If newname throws an
+exception, mv is used instead.
+Arguments:  $1=target_path $2=destination_path [$3=options]
+'
+function use_newname() {
+    # Run newname with the arguments passed to this function
+    if [[ -z $verbose ]]; then
+        # Run in quiet mode by default
+        output=$(/bin/bash $newname "-q" "$@")
+        # Parse output for any errors. If there are any, use mv instead.
+        if [[ $output == *"Error"* ]]; then
+            mv "$@"
+        fi
+    else
+        # Verbose enabled, run with with shell output
+        /bin/bash $newname "$@"
+    fi
+}
+
+# Use newname script instead of mv command (1 or 0)
+use_newname=1
+# Verbose/quiet option available for mv and newname
+verbose=""
+# Force option available for mv
+force=""
+
+# Data path (raw zip contents) is hard-coded per instructions
+data="./data"
+# Destination path (organized zip contents) is hard-coded per instructions
+destination="./grading"
+# Source .zip file to be extracted
+target=""
+
+# Optionally accepts target path  and mv options as arguments
+if [[ $# -gt 0 ]]; then
+    for arg in $@; do
+        if [[ $arg == "-v" ]]; then
+            verbose="-v"
+            echo "organize: Verbose mode enabled"
+        elif [[ $arg == "-f" ]]; then
+            force="-f"
+        else
+            target=$arg
+        fi
+    done
+fi
+
+if [[ -z $target ]]; then
+    # Prompt user for zip file path (standard use)
+    echo "Enter the target zip file path: "
+    read target
+fi
+
+if [[ ! -e $target ]]; then
+    echo "Invalid Input: the file \"$target\" does not exist."
+    exit
+fi
+
+# Create the data directory if it does not exist
+if [[ ! -d $data ]]; then
+    mkdir -p $data
+else
+    # Delete contents of existing data directory (because this isn't a production app)
+    rm -r "$data/"
+fi
+
+# Unzip target files contents to data path
+unzip -C -q $target -d $data/
+
+# Count the number of files extracted
+: '$(ls -afq | wc -l) line referenced from:
+ https://unix.stackexchange.com/questions/90106/whats-the-most-resource-efficient-way-to-count-how-many-files-are-in-a-director
+'
+
+file_count=$(ls -afq $data | wc -l)
+file_count=$((file_count - 2))
+echo "Unzipped $file_count files..."
+echo "Cleaning things up a bit..."
+
+# Create destination directory if it does not exist
+if [[ ! -d $destination ]]; then
+    mkdir -p $destination
+fi
+
+# Read each student's name from the data files
+for file in $data/*; do
+    # Remove spaces from file names (because this is Unix)
+    purged=$(echo $file | sed 's/ //')
+    mv "$file" "$purged"
+    file=$purged
+
+    # Store the filename without directory path (./data/ in this case) to parse it
+    file_clean=$(echo $file | sed 's/.*\///')
+
+    # Parse the filename for submission information
+    echo $file_clean | while IFS='_' read project student attempt date filename
+    do
+        # Check if the student has an existing subdirectory in the destination
+        if [[ ! -d $destination/$student ]]; then
+            # Create a directory if one does not exist
+            mkdir -p $destination/$student
+        fi
+
+        # Rename .txt file created by Blackboard to "memo.txt"
+        if [[ -z "$filename" ]]; then
+            filename="memo.txt"
+        fi
+        # Move submission files to student's subdirectory
+        if [[ use_newname -eq 1 ]]; then
+            # If newname script is present, it is used to preserve mulitple copies
+            use_newname "$file" "$destination/$student/$filename"
+        else
+            # Otherwise, use standard mv command which will overrite existing files
+            mv $verbose $force "$file" "$destination/$student/$filename"
+        fi
+    done # Current file moved
+done # All files moved
+
+echo "Done! All files successfully organized into students' folders."
