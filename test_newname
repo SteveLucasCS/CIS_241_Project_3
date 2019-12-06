@@ -66,8 +66,8 @@ run_newname "./a" "./new_dir/.a"
 
 # Test command-line arguments for options (valid)
 run_newname "./a" "./c" "-q"
-run_newname "./c" "./b.txt" "-D"
-run_newname "./b" "./a" "-q" "-D"
+run_newname "./c" "./b.txt" "-v"
+run_newname "./b" "./a" "-q" "-v"
 
 # Test invalid command-line arguments
 # invalid option '-t' 
