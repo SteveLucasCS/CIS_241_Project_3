@@ -22,8 +22,13 @@ function use_newname() {
     fi
 }
 
-# Use newname script instead of mv command (1 or 0)
-use_newname=1
+# Use newname script instead of mv command if found
+if [[ -e $newname ]]; then
+    use_newname=1
+else
+    use_newname=0
+fi
+
 # Verbose/quiet option available for mv and newname
 verbose=""
 # Force option available for mv
@@ -112,10 +117,10 @@ for file in $data/*; do
         fi
         # Move submission files to student's subdirectory
         if [[ use_newname -eq 1 ]]; then
-            # If newname script is present, it is used to preserve mulitple copies
+            # If newname script is present, it is used to preserve multiple copies
             use_newname "$file" "$destination/$student/$filename"
         else
-            # Otherwise, use standard mv command which will overrite existing files
+            # Otherwise, use mv command which will overwite existing files
             mv $verbose $force "$file" "$destination/$student/$filename"
         fi
     done # Current file moved

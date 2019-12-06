@@ -17,7 +17,7 @@ function show_usage() {
     if [[ $1 == "options" ]]; then
         printf "\nOptions:\n"
         printf "\t-q\tQuiet mode: limited shell output and error messages.\n"
-        printf "\t-v\tVerbose mode: Extended shell output (logs, warnings, errors).\n"
+        printf "\t-v\tVerbose mode: Logs name changes and moved files in the shell.\n"
     fi
     # End script after displaying help message
     exit
@@ -48,7 +48,7 @@ function throw_error() {
         ;;
     5)  printf "mv operation failed.\n"
         ;;
-    *)  printf "An unkown error occured: $1\n"
+    *)  printf "An unknown error occurred: $1\n"
         ;;
     esac
 
@@ -71,10 +71,7 @@ OPTIONS[O_VERBOSE]="-v"
 # Array with values indicating if an option at the corresponding index is enabled
 options_enabled=()
 
-# Options that are passed to mv command (-v or none depending on this script's mode)
-mv_options=""
-
-# All options disabled by default (ininitialized in a loop for scalability of options)
+# All options disabled by default (initialized in a loop for scalability of options)
 for (( i=0; i<${#OPTIONS[@]}; i++ )); do
     options_enabled[i]=0
 done
@@ -85,10 +82,6 @@ function handle_options() {
         # If argument matches an options string, set the option to enabled
         if [[ $1 == ${OPTIONS[i]} ]]; then
             options_enabled[i]=1
-            if [[ $i -eq O_VERBOSE ]]; then
-                # Run mv commands with "verbose" option
-                mv_options="-v"
-            fi
             return
         fi
     done
@@ -149,15 +142,9 @@ elif [[ $# -gt 2 ]]; then
             if [[ -z $target ]]; then
                 # First argument not starting with '-' is expected to be TARGET
                 target=$arg
-                if [[ options_enabled[O_VERBOSE] -eq 1 ]]; then
-                    echo "newname: TARGET path set to: $target"
-                fi
             elif [[ -z $destination ]]; then
                 # TARGET already assigned, arg is expected to be DESTINATION
                 destination=$arg
-                if [[ options_enabled[O_VERBOSE] -eq 1 ]]; then
-                    echo "newname: DESTINATION path set to: $destination"
-                fi
             else
                 # Extra, unexpected argument after destination (not an option)
                 throw_error 2 $arg
@@ -184,15 +171,16 @@ if [[ ! -e "$destination" ]]; then
     fi 
 
     # Move the file to the destination path
-    mv $mv_options "$target" "$destination"
+    mv "$target" "$destination"
+
+    if [[ ${options_enabled[O_VERBOSE]} -eq 1 ]]; then
+        # Output log to shell
+        printf "\t$target -> $destination"
+    fi
 
     if [[ $? -ne 0 ]]; then
         # mv command failed and returned an error code
         throw_error 5
-    fi
-
-    if [[ ${options_enabled[O_VERBOSE]} -eq 1 ]]; then
-        echo "newname: File \"$target\" was successfully renamed to \"$destination\""
     fi
 else
     : 'File name already exists. Increment and append the 
@@ -210,15 +198,18 @@ else
         new_path="$destination.$index"
     done
 
-    if [[ ${options_enabled[O_QUIET]} -eq 0 ]]; then
-        printf "newname: File \"$destination\" already exists - "
-        printf "\"$target\" was renamed to \"$new_path\"."
+    mv "$target" "$new_path"
+    
+    # mv command failed and returned a non-zero error code
+    if [[ $? -ne 0 ]]; then
+        throw_error 5
     fi
 
-    mv $mv_options "$target" "$new_path"
-
-    if [[ $? -ne 0 ]]; then
-        # mv command failed and returned an error code
-        throw_error 5
+    if [[ ${options_enabled[O_QUIET]} -eq 0 ]]; then
+        # Get the file's new basename
+        new_name=$(echo $new_path | sed 's/.*\///')
+        printf "\tFile \"$destination\" already exists, "
+        printf "\"$target\" renamed to \"$new_name\"\n"
+        printf "\t$target -> $new_path"
     fi
 fi

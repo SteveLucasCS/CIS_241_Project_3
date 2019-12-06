@@ -4,7 +4,6 @@
  Creates a new directory called "newname_test" which
  contains a copy of the newname script and all test files
  created by this test script.
- Only outputs unexpected results/failures to the shell.
 '
 
 working_dir="./newname_tests"
@@ -13,33 +12,53 @@ newname="newname"
 tests_run=0
 tests_failed=0
 
+quiet_mode=0
+# Quiet option:  Only outputs failures/errors to the shell.
+if [[ $1 == '-q' ]]; then
+    quiet_mode=1
+fi
+
 # Run newname script expecting no errors. 
 function run_newname() {
+    let tests_run++
     # Create the target file if it doesn't exist
     if [[ ! -e $1 ]]; then
         touch "$1"
     fi
 
-    output=$(/bin/bash "$newname" "$@")
-    let tests_run++
+    if [[ quiet_mode -eq 0 ]]; then
+        printf "\n\nTest case $tests_run: $ newname $@"
+        printf "\n"
+        # Output to shell
+        /bin/bash "$newname" "-v" "$@"
+    else
+        output=$(/bin/bash "$newname" "$@")
 
-    if [[ $output == *"Error"* ]]; then
-        printf "\nTest FAILED: $ newname $@"
-        printf "\nOuput: $output\n\n"
-        let tests_failed++
+        if [[ $output == *"Error"* ]]; then
+            printf "\nTest FAILED: $ newname $@"
+            printf "\nOuput: $output\n\n"
+            let tests_failed++
+        fi
     fi
 }
 
 # Run newname with invalid arguments, expects an error
 function run_newname_invalid() {
-    output=$(/bin/bash "$newname" "$@")
     let tests_run++
 
-    # Fails if there is NOT an error
-    if [[ ! $output == *"Error"* ]]; then
-        printf "\nTest FAILED: (Expected error not thrown) $ newname $@"
-        printf "\nOuput: $output\n\n"
-        let tests_failed++
+    if [[ quiet_mode -eq 0 ]]; then
+        printf "\n\nTest case $tests_run: $ newname $@"
+        printf "\n"
+        # Output to shell
+        /bin/bash "$newname" "$@"
+    else
+        output=$(/bin/bash "$newname" "$@")
+        # Fails if there is NOT an error
+        if [[ ! $output == *"Error"* ]]; then
+            printf "\nTest FAILED: (Expected error not thrown) $ newname $@"
+            printf "\nOuput: $output\n\n"
+            let tests_failed++
+        fi
     fi
 }
 
@@ -56,18 +75,19 @@ newname="./$newname"
 
 # Test various valid file names
 run_newname "./a.txt" "./b.txt"
+run_newname "./a" "./a"
 run_newname "./a" "./b"
 run_newname "./d" "./a"
-run_newname "./sp ac.txt" "./e s.txt"
-run_newname "./-foo" "./-bar"
-
-# Destination directory does not exist
+run_newname "./-foo" "./bar-"
+# Create new destination diretory
 run_newname "./a" "./new_dir/.a"
+# Create destination directory and parents
+run_newname "./bar-" "./f/o/o/bar-"
 
 # Test command-line arguments for options (valid)
 run_newname "./a" "./c" "-q"
-run_newname "./c" "./b.txt" "-v"
-run_newname "./b" "./a" "-q" "-v"
+run_newname "./c" "./b.txt"
+run_newname "./b" "./a" "-q"
 
 # Test invalid command-line arguments
 # invalid option '-t' 
@@ -75,10 +95,12 @@ run_newname_invalid "./a" "./b" "-t"
 # Target file does not exist
 run_newname_invalid "./zzz"
 # Insufficient number of arguments
-run_newname_invalid ".a"
+run_newname_invalid "./a"
 run_newname_invalid ""
 run_newname_invalid "" " "
 run_newname_invalid "-q"
 run_newname_invalid "-z"
+# Excess/unexpected arguments
+run_newname_invalid "./a" "./b" "./d"
 
-printf "\ntest_newname: $tests_run tests ran, $tests_failed failed.\n"
+printf "\n\ntest_newname: $tests_run tests ran, $tests_failed failed.\n"
