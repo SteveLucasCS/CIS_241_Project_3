@@ -1,8 +1,8 @@
 #!/bin/bash
 
 : 'Renames a target file based on arguments.
-If the destination file name already exists, an 
-index number is appended to the destination name.
+ If the destination file name already exists, an 
+ index number is appended to the destination name.
 '
 
 # Print proper usage message to console. 
@@ -29,9 +29,8 @@ function show_usage() {
 function throw_error() {
 
     printf "\nnewname: Error($1): "
-
     # If quiet mode is enabled, exit without detailed error message
-    if [[ options_enabled[$O_QUIET] -eq 1 ]]; then
+    if [[ ${options_enabled[$O_QUIET]} -eq 1 ]]; then
         exit
     fi
 
@@ -47,7 +46,7 @@ function throw_error() {
         ;;
     4)  printf "Target/source file \"$2\" does not exist.\n"
         ;;
-    5)  printf "mv operation exited unexpectedly.\n"
+    5)  printf "mv operation failed.\n"
         ;;
     *)  printf "An unkown error occured: $1\n"
         ;;
@@ -124,6 +123,28 @@ elif [[ $# -gt 2 ]]; then
     # Arguments starting with '-' are handled as options
     for arg in $@; do
         if [[ ${arg:0:1} == '-' ]]; then
+            # Check if string len > 2 or == an existing file
+            # If so, interpret as TARGET instead of option
+            if [[ ${#arg} -gt 2 ]]; then
+                if [[ -z $target ]]; then
+                    target=$arg
+                elif [[ -z $destination ]]; then
+                    destination=$arg
+                else
+                    handle_options $arg
+                fi
+            # This code is very repetitive and not DRY,
+            # but it's a last minute patch to mitigate errors
+            # with file names starting with '-'
+            elif [[ -e "$arg" ]]; then
+                if [[ -z $target ]]; then
+                    target=$arg
+                elif [[ -z $destination ]]; then
+                    destination=$arg
+                else
+                    handle_options $arg
+                fi
+            fi
             handle_options $arg
         else
             if [[ -z $target ]]; then
@@ -154,8 +175,17 @@ if [[ ! -e "$target" ]]; then
 fi
 
 # Check if destination path already exists
+# If the filename/path does NOT already exist:
 if [[ ! -e "$destination" ]]; then
-    # Destination path does NOT exist, rename target file as normal.
+    # Get destination directory path
+    dest_dir=$(echo "$destination" | sed "s/\(.*\)\/.*/\1/")
+  
+    # If dest_dir does not already exist, make it.
+    if [[ ! -d $dest_dir ]]; then
+        mkdir -p "$dest_dir"
+    fi 
+
+    # Move the file to the destination path
     mv $mv_options "$target" "$destination"
 
     if [[ $? -ne 0 ]]; then
@@ -173,6 +203,8 @@ else
     is found, then renames the target file.
     '
     index=0
+  
+    # New path/filename with appended index
     new_path=$destination
 
     while [[ -e $new_path ]]; do

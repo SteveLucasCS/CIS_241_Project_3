@@ -11,7 +11,7 @@ function use_newname() {
     # Run newname with the arguments passed to this function
     if [[ -z $verbose ]]; then
         # Run in quiet mode by default
-        output=$(/bin/bash $newname "-D" "$@")
+        output=$(/bin/bash $newname "-q" "$@")
         # Parse output for any errors. If there are any, use mv instead.
         if [[ $output == *"Error"* ]]; then
             mv "$@"
@@ -63,7 +63,7 @@ fi
 
 # Create the data directory if it does not exist
 if [[ ! -d $data ]]; then
-    mkdir $data
+    mkdir -p $data
 else
     # Delete contents of existing data directory (because this isn't a production app)
     rm -r "$data/"
@@ -81,9 +81,10 @@ file_count=$(ls -afq $data | wc -l)
 file_count=$((file_count - 2))
 echo "Unzipped $file_count files..."
 echo "Cleaning things up a bit..."
+
 # Create destination directory if it does not exist
 if [[ ! -d $destination ]]; then
-    mkdir $destination
+    mkdir -p $destination
 fi
 
 # Read each student's name from the data files
@@ -102,7 +103,7 @@ for file in $data/*; do
         # Check if the student has an existing subdirectory in the destination
         if [[ ! -d $destination/$student ]]; then
             # Create a directory if one does not exist
-            mkdir $destination/$student
+            mkdir -p $destination/$student
         fi
 
         # Rename .txt file created by Blackboard to "memo.txt"

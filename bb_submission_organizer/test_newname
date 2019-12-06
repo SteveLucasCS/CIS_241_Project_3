@@ -1,0 +1,84 @@
+#!/bin/bash
+
+: 'Tests for the "newname" script for CIS241 Project 3.
+ Creates a new directory called "newname_test" which
+ contains a copy of the newname script and all test files
+ created by this test script.
+ Only outputs unexpected results/failures to the shell.
+'
+
+working_dir="./newname_tests"
+newname="newname"
+
+tests_run=0
+tests_failed=0
+
+# Run newname script expecting no errors. 
+function run_newname() {
+    # Create the target file if it doesn't exist
+    if [[ ! -e $1 ]]; then
+        touch "$1"
+    fi
+
+    output=$(/bin/bash "$newname" "$@")
+    let tests_run++
+
+    if [[ $output == *"Error"* ]]; then
+        printf "\nTest FAILED: $ newname $@"
+        printf "\nOuput: $output\n\n"
+        let tests_failed++
+    fi
+}
+
+# Run newname with invalid arguments, expects an error
+function run_newname_invalid() {
+    output=$(/bin/bash "$newname" "$@")
+    let tests_run++
+
+    # Fails if there is NOT an error
+    if [[ ! $output == *"Error"* ]]; then
+        printf "\nTest FAILED: (Expected error not thrown) $ newname $@"
+        printf "\nOuput: $output\n\n"
+        let tests_failed++
+    fi
+}
+
+# Create working directory if it doesn't exist
+if [[ ! -d $working_dir ]]; then
+    mkdir -p "$working_dir"
+fi
+
+# Create a copy of newname so I have to write less code
+cp $newname "$working_dir/$newname"
+cd $working_dir
+
+newname="./$newname"
+
+# Test various valid file names
+run_newname "./a.txt" "./b.txt"
+run_newname "./a" "./b"
+run_newname "./d" "./a"
+run_newname "./sp ac.txt" "./e s.txt"
+run_newname "./-foo" "./-bar"
+
+# Destination directory does not exist
+run_newname "./a" "./new_dir/.a"
+
+# Test command-line arguments for options (valid)
+run_newname "./a" "./c" "-q"
+run_newname "./c" "./b.txt" "-D"
+run_newname "./b" "./a" "-q" "-D"
+
+# Test invalid command-line arguments
+# invalid option '-t' 
+run_newname_invalid "./a" "./b" "-t"
+# Target file does not exist
+run_newname_invalid "./zzz"
+# Insufficient number of arguments
+run_newname_invalid ".a"
+run_newname_invalid ""
+run_newname_invalid "" " "
+run_newname_invalid "-q"
+run_newname_invalid "-z"
+
+printf "\ntest_newname: $tests_run tests ran, $tests_failed failed.\n"
