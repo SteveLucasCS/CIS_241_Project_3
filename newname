@@ -1,0 +1,229 @@
+#!/bin/bash
+
+: 'Renames a target file based on arguments.
+ If the destination file name already exists, an 
+ index number is appended to the destination name.
+'
+
+# Print proper usage message to console. 
+function show_usage() {
+
+    echo "Usage: newname SOURCE DESTINATION"
+    echo "  or: newname [OPTION]... TARGET_PATH DESTINATION_PATH"
+    echo "  or: newname SOURCE DESTINATION [OPTION]..."
+    printf "\nSOURCE and DESTINATION are required arguments.\n"
+
+    # Show accepted optional arguments
+    if [[ $1 == "options" ]]; then
+        printf "\nOptions:\n"
+        printf "\t-q\tQuiet mode: limited shell output and error messages.\n"
+        printf "\t-D\tDebug mode: Extended shell output (logs, warnings, errors).\n"
+    fi
+    # End script after displaying help message
+    exit
+}
+
+# Echo error code and message to shell.
+# param 1: Error Code
+# param 2: (optional) String to echo
+function throw_error() {
+
+    printf "\nnewname: Error($1): "
+    # If quiet mode is enabled, exit without detailed error message
+    if [[ ${options_enabled[$O_QUIET]} -eq 1 ]]; then
+        exit
+    fi
+
+    case $1 in
+    1)  printf "Insufficient number of arguments.\n"
+        show_usage
+        ;;
+    2)  printf "Unexpected argument: $2\n"
+        show_usage
+        ;;
+    3)  printf "Invalid argument: $2\n"
+        show_usage "options"
+        ;;
+    4)  printf "Target/source file \"$2\" does not exist.\n"
+        ;;
+    5)  printf "mv operation failed.\n"
+        ;;
+    *)  printf "An unkown error occured: $1\n"
+        ;;
+    esac
+
+    exit
+}
+
+# Array of optional modes that can be enabled via command-line arguments
+OPTION_STRINGS=()
+
+# Quiet mode: limited shell output.
+# Enum corresponding to the index of the quiet option in the options array
+O_QUIET=0
+# Debug mode: more shell output and debug messages
+# Enum corresponding to the index of the debug option in options array
+O_DEBUG=1
+
+OPTIONS[O_QUIET]="-q"
+OPTIONS[O_DEBUG]="-D"
+
+# Array with values indicating if an option at the corresponding index is enabled
+options_enabled=()
+
+# Options that are passed to mv command (-v or none depending on this script's mode)
+mv_options=""
+
+# All options disabled by default (ininitialized in a loop for scalability of options)
+for (( i=0; i<${#OPTIONS[@]}; i++ )); do
+    options_enabled[i]=0
+done
+
+function handle_options() {
+    # Check argument against accepted options
+    for (( i=0; i<${#OPTIONS[@]}; i++ )); do
+        # If argument matches an options string, set the option to enabled
+        if [[ $1 == ${OPTIONS[i]} ]]; then
+            options_enabled[i]=1
+            if [[ $i -eq O_DEBUG ]]; then
+                echo "newname: Debug mode enabled."
+                # Run mv commands with "verbose" option
+                mv_options="-v"
+            fi
+            return
+        fi
+    done
+    
+    # Argument does not match any valid options
+    if [[ ${options_enabled[O_QUIET]} -eq 0 ]]; then
+        throw_error 3 $1
+    fi
+}
+
+# Path to the target file
+target=""
+# Path to the move destination 
+destination=""
+# Array of option arguments passed
+
+# If arg 1 is "--help", show usage information and exit.
+if [[ $1 == "--help" ]]; then
+    show_usage "options"
+fi
+
+# Get options from command-line arguments if they are present.
+# Option arguments must start a '-'. Valid options are shown in usage info.
+if [[ $# -eq 2 ]]; then
+    # Get target path from argument 1
+    target=$1
+    # Get destination path from argument 2
+    destination=$2
+
+elif [[ $# -gt 2 ]]; then
+    # Arguments starting with '-' are handled as options
+    for arg in $@; do
+        if [[ ${arg:0:1} == '-' ]]; then
+            # Check if string len > 2 or == an existing file
+            # If so, interpret as TARGET instead of option
+            if [[ ${#arg} -gt 2 ]]; then
+                if [[ -z $target ]]; then
+                    target=$arg
+                elif [[ -z $destination ]]; then
+                    destination=$arg
+                else
+                    handle_options $arg
+                fi
+            # This code is very repetitive and not DRY,
+            # but it's a last minute patch to mitigate errors
+            # with file names starting with '-'
+            elif [[ -e "$arg" ]]; then
+                if [[ -z $target ]]; then
+                    target=$arg
+                elif [[ -z $destination ]]; then
+                    destination=$arg
+                else
+                    handle_options $arg
+                fi
+            fi
+            handle_options $arg
+        else
+            if [[ -z $target ]]; then
+                # First argument not starting with '-' is expected to be TARGET
+                target=$arg
+                if [[ options_enabled[O_DEBUG] -eq 1 ]]; then
+                    echo "newname: TARGET path set to: $target"
+                fi
+            elif [[ -z $destination ]]; then
+                # TARGET already assigned, arg is expected to be DESTINATION
+                destination=$arg
+                if [[ options_enabled[O_DEBUG] -eq 1 ]]; then
+                    echo "newname: DESTINATION path set to: $destination"
+                fi
+            else
+                # Extra, unexpected argument after destination (not an option)
+                throw_error 2 $arg
+            fi
+        fi
+    done
+else
+    # Insufficient number of arguments (less than 2)
+    throw_error 1
+fi
+# Error (4): Target file does not exist.
+if [[ ! -e "$target" ]]; then
+    throw_error 4 "$target"
+fi
+
+# Check if destination path already exists
+# If the filename/path does NOT already exist:
+if [[ ! -e "$destination" ]]; then
+    # Get destination directory path
+    dest_dir=$(echo "$destination" | sed "s/\(.*\)\/.*/\1/")
+  
+    # If dest_dir does not already exist, make it.
+    if [[ ! -d $dest_dir ]]; then
+        mkdir -p "$dest_dir"
+    fi 
+
+    # Move the file to the destination path
+    mv $mv_options "$target" "$destination"
+
+    if [[ $? -ne 0 ]]; then
+        # mv command failed and returned an error code
+        throw_error 5
+    fi
+
+    if [[ ${options_enabled[O_DEBUG]} -eq 1 ]]; then
+        echo "newname: File \"$target\" was successfully renamed to \"$destination\""
+    fi
+else
+    : 'File name already exists. Increment and append the 
+    index number to the destination path and check if that 
+    name already exists. Iterates index until no matching file 
+    is found, then renames the target file.
+    '
+    index=0
+  
+    # New path/filename with appended index
+    new_path=$destination
+
+    while [[ -e $new_path ]]; do
+        let index++
+        new_path="$destination.$index"
+    done
+
+    if [[ ${options_enabled[O_QUIET]} -eq 0 ]]; then
+        echo "newname: File \"$destination\" already exists:"
+    fi
+
+    mv $mv_options "$target" "$new_path"
+
+    if [[ $? -ne 0 ]]; then
+        # mv command failed and returned an error code
+        throw_error 5
+    fi
+
+    if [[ ${options_enabled[O_QUIET]} -eq 0 ]]; then
+        echo "newname: \"$target\" was renamed to \"$new_path\"."
+    fi
+fi
